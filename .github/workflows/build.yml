@@ -1,0 +1,62 @@
+name: APK yig'ish
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip faylni ochish (agar yuklangan bo'lsa)
+        run: |
+          if [ -f english_app.zip ]; then
+            unzip -o english_app.zip -d .
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Android fayllarini yaratish
+        run: flutter create . --platforms=android --org uz.engwords --project-name english_app
+
+      - name: Manifestni sozlash
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="english_app"/android:label="EngWords"/' "$M"
+          if ! grep -q TTS_SERVICE "$M"; then
+            if grep -q "<queries>" "$M"; then
+              sed -i 's#<queries>#<queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>#' "$M"
+            else
+              sed -i 's#</manifest>#<queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries></manifest>#' "$M"
+            fi
+          fi
+
+      - run: flutter pub get
+
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngWords-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Release yaratish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: EngWords v1.0.${{ github.run_number }}
+          files: build/app/outputs/flutter-apk/app-release.apk
